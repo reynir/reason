@@ -1,62 +1,41 @@
-(*
- * Copyright (c) 2015-present, Facebook, Inc.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *)
-
-
-let () = Reason_pprint_ast.configure
-  (* This can be made pluggable in the future. *)
-  ~width:80
-  ~assumeExplicitArity:false
-  ~constructorLists:[]
-
-let reasonFormatter = Reason_pprint_ast.createFormatter ()
-
-(* "Why would you ever pass in some of these to print into Reason?"
-"Because Merlin returns these as type signature sometimes" *)
-
-(* int list *)
+let () =
+  Reason_pprint_ast.configure ~width:80 ~assumeExplicitArity:false
+    ~constructorLists:[]
+  
+let reasonFormatter = Reason_pprint_ast.createFormatter () 
 let parseAsCoreType str formatter =
-  Lexing.from_string str
-  |> Reason_toolchain.ML.core_type
-  |> reasonFormatter#core_type formatter
-
-(* type a = int list *)
+  ((Lexing.from_string str) |> Reason_toolchain.ML.core_type) |>
+    (reasonFormatter#core_type formatter)
+  
 let parseAsImplementation str formatter =
-  Lexing.from_string str
-  |> Reason_toolchain.ML.implementation
-  |> reasonFormatter#structure [] formatter
-
-(* val a: int list *)
+  ((Lexing.from_string str) |> Reason_toolchain.ML.implementation) |>
+    (reasonFormatter#structure [] formatter)
+  
 let parseAsInterface str formatter =
-  Lexing.from_string str
-  |> Reason_toolchain.ML.interface
-  |> reasonFormatter#signature [] formatter
-
-(* sig val a: int list end *)
-(* This one is a hack; we should have our own parser entry point to module_type.
-But that'd require modifying compiler-libs, which we'll refrain from doing. *)
+  ((Lexing.from_string str) |> Reason_toolchain.ML.interface) |>
+    (reasonFormatter#signature [] formatter)
+  
 let parseAsCoreModuleType str formatter =
-  Lexing.from_string ("module X: " ^ str)
-  |> Reason_toolchain.ML.interface
-  |> reasonFormatter#signature [] formatter
-
-(* Quirky merlin/ocaml output that doesn't really parse. *)
+  ((Lexing.from_string ("module X: " ^ str)) |> Reason_toolchain.ML.interface)
+    |> (reasonFormatter#signature [] formatter)
+  
 let parseAsWeirdListSyntax str a =
-  if str = "type 'a list = [] | :: of 'a * 'a list" then "type list 'a = [] | :: of list 'a 'a"
-  (* Manually creating an error is tedious, so we'll put a hack here to throw the previous error. *)
-  else raise (Syntaxerr.Error a)
-
+  if str = "type 'a list = [] | :: of 'a * 'a list"
+  then "type list 'a = [] | :: of list 'a 'a"
+  else raise (Syntaxerr.Error a) 
 let convert str =
-  let formatter = Format.str_formatter in
-  try (parseAsCoreType str formatter; Format.flush_str_formatter ())
-  with Syntaxerr.Error _ ->
-  try (parseAsImplementation str formatter; Format.flush_str_formatter ())
-  with Syntaxerr.Error _ ->
-  try (parseAsInterface str formatter; Format.flush_str_formatter ())
-  with Syntaxerr.Error _ ->
-  try (parseAsCoreModuleType str formatter; Format.flush_str_formatter ())
-  with Syntaxerr.Error a ->
-  (parseAsWeirdListSyntax str a)
+  let formatter = Format.str_formatter  in
+  try parseAsCoreType str formatter; Format.flush_str_formatter ()
+  with
+  | Syntaxerr.Error _ ->
+      (try parseAsImplementation str formatter; Format.flush_str_formatter ()
+       with
+       | Syntaxerr.Error _ ->
+           (try parseAsInterface str formatter; Format.flush_str_formatter ()
+            with
+            | Syntaxerr.Error _ ->
+                (try
+                   parseAsCoreModuleType str formatter;
+                   Format.flush_str_formatter ()
+                 with | Syntaxerr.Error a -> parseAsWeirdListSyntax str a)))
+  
